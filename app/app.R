@@ -1,5 +1,5 @@
 # ML Definitions Quiz
-
+library(shinythemes)
 library(tidyverse)
 library(shiny)
 
@@ -40,26 +40,33 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
 server <- function(input, output) {
     # Reactive vals to keep track of qs asked
     user <- reactiveValues(if_finish_quiz = NULL, user_response = NULL)
-    track <- reactiveValues(score = 0, qs_no = 1)
+    track <- reactiveValues(score = 0, qs_no = 1, qs_asked = NULL)
     
     observeEvent(input$start, {
         #initialize values
         user$if_finish_quiz <- NULL
         track$score <- 0
         track$qs_no <- 1
+        qs_asked <- NULL
     })
     
     observeEvent(input$submit, {
         user$user_response <- as.numeric(input$term)
         track$score <- track$score + 1
         track$qs_no <- track$qs_no + 1
+        if(track$qs_no == 15) {
+            user$if_finish_quiz <- TRUE
+        }
     })
     
     # Next Definition Selection
     
     # Definition Display
     output$definition <- renderText({
-        definitions[track$qs_no,]$Defination_Text
+        if(is.null(user$if_finish_quiz)){
+            definitions[track$qs_no,]$Defination_Text
+        } else
+            "Let's see how you performed!"
     })
 
 }
