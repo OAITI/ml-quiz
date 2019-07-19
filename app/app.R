@@ -4,16 +4,21 @@ library(tidyverse)
 library(shiny)
 
 definitions <- read_csv("../data/definitions.csv")
+## Set images resource path
+addResourcePath("images", "images")
 
-ui <- fluidPage(
+ui <- fluidPage(theme = shinytheme("cerulean"),
+                
+    includeCSS("css/styles.css"),
 
     # Application title
     titlePanel("Machine Learning Definitions"),
 
     sidebarLayout(
         sidebarPanel(
+            a(href = "https://oaiti.org", target = "_blank", img(src = "images/oaiti_transparent.png", width = "135")),
             h3("Welcome to the Machine Learning Glossary Quiz!"), 
-            actionButton("start", "Start Quiz", icon = icon("next", lib = "font-awesome")),
+            actionButton("start", "Start Quiz", icon = icon("play-circle", lib = "font-awesome")),
             hr(),
             a(href = "https://developers.google.com/machine-learning/glossary/", "Source")
         ),
@@ -27,7 +32,7 @@ ui <- fluidPage(
             textInput("term",
                      "What term does the above text define?"
                      ),
-            actionButton("submit", "Submit", icon = icon("next", lib = "font-awesome"))
+            actionButton("submit", "Submit", icon = icon("", lib = "font-awesome"))
             ),
         )
 )
