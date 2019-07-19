@@ -47,14 +47,17 @@ server <- function(input, output) {
         user$if_finish_quiz <- NULL
         track$score <- 0
         track$qs_no <- 1
-        qs_asked <- NULL
+        track$qs_asked <- NULL
     })
     
     observeEvent(input$submit, {
         user$user_response <- as.numeric(input$term)
         track$score <- track$score + 1
-        track$qs_no <- track$qs_no + 1
-        if(track$qs_no == 15) {
+        # sampling from unasked questions for finding the next question
+        track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
+        track$qs_asked <- c(track$qs_asked, track$qs_no)
+        # stop if 15 questions asked
+        if(length(track$qs_asked) == 15) {
             user$if_finish_quiz <- TRUE
         }
     })
