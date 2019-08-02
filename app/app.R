@@ -3,6 +3,7 @@ library(shinythemes)
 library(tidyverse)
 library(shiny)
 library(tidytext)
+library(httr)
 
 definitions <- read_csv("../data/definitions.csv")
 ## Set images resource path
