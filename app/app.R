@@ -7,6 +7,7 @@ library(tidytext)
 definitions <- read_csv("../data/definitions.csv")
 ## Set images resource path
 addResourcePath("images", "images")
+load("../data/answers_result.RData")
 
 ui <- fluidPage(theme = shinytheme("cerulean"),
                 
@@ -54,7 +55,7 @@ server <- function(session, input, output) {
         user$if_finish_quiz <- NULL
         track$score <- 0
         track$qs_no <- sample(c(1:nrow(definitions)), size = 1)
-        track$qs_asked <- NULL
+        track$qs_asked <- 0
     })
     
     observeEvent(input$submit, {
@@ -62,30 +63,30 @@ server <- function(session, input, output) {
         if(length(str_split(str_trim(input$termdef), pattern = " ", simplify = TRUE)) > 1) {
             user$user_response <- tolower(as.character(input$termdef))
             # response words
-            answords <- tibble(response = as.character(user$user_response), 
-                               term = definitions[track$qs_no,]$Header) %>%
-                unnest_tokens(word, response, token = "tweets") %>%
-                anti_join(stop_words) %>%
-                mutate(word = SnowballC::wordStem(word, language = "english"))
-            # definition words
-            defwords <- tibble(definition = definitions[track$qs_no,]$Defination_Text, 
-                               term = definitions[track$qs_no,]$Header) %>%
-                unnest_tokens(word, definition, token = "tweets") %>%
-                anti_join(stop_words) %>%
-                mutate(word = SnowballC::wordStem(word, language = "english"))
-            matchdf <- defwords %>%
-                inner_join(select(answords, term, word), by = "word" ) 
-            avg_words <- (length(unique(answords$word)) + length(unique(defwords$word)))/2
+            user_raw <- POST("http://104.198.98.159:5000/encode", body = list(text = user$user_response), encode = "json")
+            user_result <- fromJSON(content(user_raw, "text"))
             
-            track$score <- length(unique(matchdf$word))/avg_words + track$score #todo
-            #track$score <- track$score + 1
-            # sampling from unasked questions for finding the next question
-            track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
-            track$qs_asked <- c(track$qs_asked, track$qs_no)
+            # definition words encoded in answers_result
+            #answers_sample <- sample(1:379, size = 50)
+            scores <- as.numeric(cosineSimilarity(user_result, answers_result))
+            cutoff <- quantile(scores, .95)
+            cat(cutoff)
+            correct <- scores[track$qs_no] > cutoff || which.max(scores) == track$qs_no
+            cat(correct)
+            which.max(scores)
+            if(correct) {
+                track$score <- track$score + 1
+                cat(track$score)
+            }
+                
             # stop if 15 questions asked
-            if(length(track$qs_asked) == 5) {
+            if(track$qs_asked == 2) {
                 user$if_finish_quiz <- TRUE
             }
+            # sampling from unasked questions for finding the next question
+            track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
+            track$qs_asked <- track$qs_asked + 1
+            
             updateTextAreaInput(session, value = "", inputId = "termdef")
         } else { # if 0 or only 1 word entered
             updateTextAreaInput(session, value = "", inputId = "termdef")
