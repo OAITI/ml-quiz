@@ -5,6 +5,7 @@ library(shiny)
 library(tidytext)
 library(httr)
 library(jsonlite)
+library(wordVectors)
 
 definitions <- read_csv("../data/definitions.csv")
 ## Set images resource path
