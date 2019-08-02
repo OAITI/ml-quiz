@@ -2,6 +2,7 @@
 library(shinythemes)
 library(tidyverse)
 library(shiny)
+library(tidytext)
 
 definitions <- read_csv("../data/definitions.csv")
 ## Set images resource path
@@ -23,55 +24,97 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
             a(href = "https://developers.google.com/machine-learning/glossary/", "Source")
         ),
 
-        # Show a definition
+        # Show a term
         mainPanel(
             hr(),
-            h4(textOutput("definition")),
+            h4(textOutput("term")),
             hr(),
             br(),
-            textInput("term",
-                     "What term does the above text define?"
-                     ),
-            actionButton("submit", "Submit", icon = icon("", lib = "font-awesome"))
-            ),
+            conditionalPanel(condition = "input.start",
+                textAreaInput("termdef",
+                          "What is the definition of the above term?", value = NULL
+                          ),
+                actionButton("submit", "Submit", icon = icon("", lib = "font-awesome")),
+                br(), hr(),
+                h4("Answers"),
+                tableOutput("answer"),
+                textOutput("prevscore")
+                )
+            )
         )
 )
 
-server <- function(input, output) {
+server <- function(session, input, output) {
     # Reactive vals to keep track of qs asked
     user <- reactiveValues(if_finish_quiz = NULL, user_response = NULL)
-    track <- reactiveValues(score = 0, qs_no = 1, qs_asked = NULL)
+    track <- reactiveValues(score = 0, qs_no = NULL, qs_asked = NULL)
     
     observeEvent(input$start, {
         #initialize values
         user$if_finish_quiz <- NULL
         track$score <- 0
-        track$qs_no <- 1
+        track$qs_no <- sample(c(1:nrow(definitions)), size = 1)
         track$qs_asked <- NULL
     })
     
     observeEvent(input$submit, {
-        user$user_response <- as.numeric(input$term)
-        track$score <- track$score + 1
-        # sampling from unasked questions for finding the next question
-        track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
-        track$qs_asked <- c(track$qs_asked, track$qs_no)
-        # stop if 15 questions asked
-        if(length(track$qs_asked) == 15) {
-            user$if_finish_quiz <- TRUE
+        # Scoring - Compare input term to Definition Text in data
+        if(length(str_split(str_trim(input$termdef), pattern = " ", simplify = TRUE)) > 1) {
+            user$user_response <- tolower(as.character(input$termdef))
+            # response words
+            answords <- tibble(response = as.character(user$user_response), 
+                               term = definitions[track$qs_no,]$Header) %>%
+                unnest_tokens(word, response, token = "tweets") %>%
+                anti_join(stop_words) %>%
+                mutate(word = SnowballC::wordStem(word, language = "english"))
+            # definition words
+            defwords <- tibble(definition = definitions[track$qs_no,]$Defination_Text, 
+                               term = definitions[track$qs_no,]$Header) %>%
+                unnest_tokens(word, definition, token = "tweets") %>%
+                anti_join(stop_words) %>%
+                mutate(word = SnowballC::wordStem(word, language = "english"))
+            matchdf <- defwords %>%
+                inner_join(select(answords, term, word), by = "word" ) 
+            avg_words <- (length(unique(answords$word)) + length(unique(defwords$word)))/2
+            
+            track$score <- length(unique(matchdf$word))/avg_words + track$score #todo
+            #track$score <- track$score + 1
+            # sampling from unasked questions for finding the next question
+            track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
+            track$qs_asked <- c(track$qs_asked, track$qs_no)
+            # stop if 15 questions asked
+            if(length(track$qs_asked) == 5) {
+                user$if_finish_quiz <- TRUE
+            }
+            updateTextAreaInput(session, value = "", inputId = "termdef")
+        } else { # if 0 or only 1 word entered
+            updateTextAreaInput(session, value = "", inputId = "termdef")
         }
     })
     
-    # Next Definition Selection
-    
-    # Definition Display
-    output$definition <- renderText({
+    # Next Term Selection
+    # Term Display
+    output$term <- renderText({
         if(is.null(user$if_finish_quiz)){
-            definitions[track$qs_no,]$Defination_Text
-        } else
-            "Let's see how you performed!"
+            str_to_title(definitions[track$qs_no,]$Header)
+        } else {
+            "Let's see how you performed! \n Total Score:"
+        }
     })
-
+    
+    output$answer <- renderTable({
+        if(is.null(user$if_finish_quiz)){
+            definitions[track$qs_no,] %>%
+                mutate(`Your Answer` = input$termdef) %>%
+                select(Definition = Defination_Text, `Your Answer`)
+        }
+    })
+    
+    output$prevscore <- renderText({
+        if(!is.null(user$if_finish_quiz)) {
+            track$score
+        }
+    })
 }
 
 # Run the application 
