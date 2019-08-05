@@ -12,6 +12,7 @@ definitions <- read_csv("../data/definitions.csv")
 addResourcePath("images", "images")
 load("../data/answers_result.RData")
 
+
 ui <- fluidPage(theme = shinytheme("cerulean"),
                 
     includeCSS("css/styles.css"),
@@ -24,6 +25,9 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
             a(href = "https://oaiti.org", target = "_blank", img(src = "images/oaiti_transparent.png", width = "135")),
             h3("Welcome to the Machine Learning Glossary Quiz!"), 
             actionButton("start", "Start Quiz", icon = icon("play-circle", lib = "font-awesome")),
+            br(), br(),
+            hr(),
+            sliderInput("n_qs", label = "Select the number of questions", min = 0, max = 30, value = 5),
             hr(),
             a(href = "https://developers.google.com/machine-learning/glossary/", "Source")
         ),
@@ -32,17 +36,17 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
         mainPanel(
             hr(),
             h4(textOutput("term")),
-            hr(),
-            br(),
-            conditionalPanel(condition = "input.start",
+            conditionalPanel(
+                condition = "input.start",
+                hr(),
+                br(),
                 textAreaInput("termdef",
                           "What is the definition of the above term?", value = NULL
                           ),
                 actionButton("submit", "Submit", icon = icon("", lib = "font-awesome")),
                 br(), hr(),
-                h4("Answers"),
-                tableOutput("answer"),
-                textOutput("prevscore")
+                textOutput("prevscore"),
+                tableOutput("answers")
                 )
             )
         )
@@ -58,19 +62,19 @@ server <- function(session, input, output) {
         user$if_finish_quiz <- NULL
         track$score <- 0
         track$qs_no <- sample(c(1:nrow(definitions)), size = 1)
-        track$qs_asked <- 0
+        track$qs_asked <- NULL
+        user$user_response <- NULL
     })
     
     observeEvent(input$submit, {
         # Scoring - Compare input term to Definition Text in data
-        if(length(str_split(str_trim(input$termdef), pattern = " ", simplify = TRUE)) > 1) {
-            user$user_response <- tolower(as.character(input$termdef))
+        if(length(str_split(str_trim(input$termdef), pattern = " ", simplify = TRUE)) > 0) {
+            response <- tolower(as.character(input$termdef))
             # response words
-            user_raw <- POST("http://104.198.98.159:5000/encode", body = list(text = user$user_response), encode = "json")
+            user_raw <- POST("http://104.198.98.159:5000/encode", body = list(text = response), encode = "json")
             user_result <- fromJSON(content(user_raw, "text"))
             
             # definition words encoded in answers_result
-            #answers_sample <- sample(1:379, size = 50)
             scores <- as.numeric(cosineSimilarity(user_result, answers_result))
             cutoff <- quantile(scores, .95)
             cat(cutoff)
@@ -79,16 +83,18 @@ server <- function(session, input, output) {
             which.max(scores)
             if(correct) {
                 track$score <- track$score + 1
-                cat(track$score)
             }
                 
+            # keep track of asked
+            track$qs_asked <- c(track$qs_asked, track$qs_no) 
+            user$user_response <- c(user$user_response, input$termdef)
+            
             # stop if 15 questions asked
-            if(track$qs_asked == 2) {
+            if(length(track$qs_asked) == input$n_qs) {
                 user$if_finish_quiz <- TRUE
             }
             # sampling from unasked questions for finding the next question
             track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
-            track$qs_asked <- track$qs_asked + 1
             
             updateTextAreaInput(session, value = "", inputId = "termdef")
         } else { # if 0 or only 1 word entered
@@ -102,21 +108,23 @@ server <- function(session, input, output) {
         if(is.null(user$if_finish_quiz)){
             str_to_title(definitions[track$qs_no,]$Header)
         } else {
-            "Let's see how you performed! \n Total Score:"
+            "Let's see how you performed! \n "
         }
     })
     
-    output$answer <- renderTable({
-        if(is.null(user$if_finish_quiz)){
-            definitions[track$qs_no,] %>%
-                mutate(`Your Answer` = input$termdef) %>%
-                select(Definition = Defination_Text, `Your Answer`)
+    output$answers <- renderTable({
+        if(!is.null(user$if_finish_quiz)){
+            definitions[track$qs_asked,] %>%
+                mutate(`Your Answers` = user$user_response) %>%
+                select(Term = Header, Definitions = Defination_Text, `Your Answers`)
         }
     })
     
     output$prevscore <- renderText({
         if(!is.null(user$if_finish_quiz)) {
-            track$score
+            paste("Total Right Answers:", track$score, "\n Percent: ", track$score/input$n_qs*100, "%")
+        } else {
+            paste("Current Score =", track$score)
         }
     })
 }
