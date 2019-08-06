@@ -35,7 +35,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
         # Show a term
         mainPanel(
             hr(),
-            h4(textOutput("term")),
+            strong(h3(textOutput("term"))),
             conditionalPanel(
                 condition = "input.start",
                 hr(),
@@ -45,7 +45,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                           ),
                 actionButton("submit", "Submit", icon = icon("", lib = "font-awesome")),
                 br(), hr(),
-                textOutput("prevscore"),
+                uiOutput("prevscore"),
                 tableOutput("answers")
                 )
             )
@@ -55,7 +55,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
 server <- function(session, input, output) {
     # Reactive vals to keep track of qs asked
     user <- reactiveValues(if_finish_quiz = NULL, user_response = NULL)
-    track <- reactiveValues(score = 0, qs_no = NULL, qs_asked = NULL)
+    track <- reactiveValues(score = 0, correct = NULL, qs_no = NULL, qs_asked = NULL)
     
     observeEvent(input$start, {
         #initialize values
@@ -63,6 +63,7 @@ server <- function(session, input, output) {
         track$score <- 0
         track$qs_no <- sample(c(1:nrow(definitions)), size = 1)
         track$qs_asked <- NULL
+        track$correct <- NULL
         user$user_response <- NULL
     })
     
@@ -88,6 +89,7 @@ server <- function(session, input, output) {
             # keep track of asked
             track$qs_asked <- c(track$qs_asked, track$qs_no) 
             user$user_response <- c(user$user_response, input$termdef)
+            track$correct <- c(correct, track$correct) 
             
             # stop if 15 questions asked
             if(length(track$qs_asked) == input$n_qs) {
@@ -115,16 +117,19 @@ server <- function(session, input, output) {
     output$answers <- renderTable({
         if(!is.null(user$if_finish_quiz)){
             definitions[track$qs_asked,] %>%
-                mutate(`Your Answers` = user$user_response) %>%
-                select(Term = Header, Definitions = Defination_Text, `Your Answers`)
+                mutate(`Your Answers` = user$user_response, Correct = track$correct) %>%
+                select(Term = Header, Definitions = Defination_Text, `Your Answers`, Correct)
         }
     })
     
-    output$prevscore <- renderText({
+    output$prevscore <- renderUI({
         if(!is.null(user$if_finish_quiz)) {
-            paste("Total Right Answers:", track$score, "\n Percent: ", track$score/input$n_qs*100, "%")
+            list(
+                h4("Total Right Answers:", track$score),
+                h4("Percent: ", track$score/input$n_qs*100, "%")
+            )
         } else {
-            paste("Current Score =", track$score)
+            list(h4("Current Score =", track$score))
         }
     })
 }
