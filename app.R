@@ -61,7 +61,7 @@ server <- function(session, input, output) {
         #initialize values
         user$if_finish_quiz <- NULL
         track$score <- 0
-        track$qs_no <- sample(c(1:nrow(definitions)), size = 1)
+        track$qs_no <- 1
         track$qs_asked <- NULL
         track$correct <- NULL
         user$user_response <- NULL
@@ -78,10 +78,7 @@ server <- function(session, input, output) {
             # definition words encoded in answers_result
             scores <- as.numeric(cosineSimilarity(user_result, answers_result))
             cutoff <- quantile(scores, .95)
-            cat(cutoff)
             correct <- scores[track$qs_no] > cutoff || which.max(scores) == track$qs_no
-            cat(correct)
-            which.max(scores)
             if(correct) {
                 track$score <- track$score + 1
             }
@@ -89,14 +86,15 @@ server <- function(session, input, output) {
             # keep track of asked
             track$qs_asked <- c(track$qs_asked, track$qs_no) 
             user$user_response <- c(user$user_response, input$termdef)
-            track$correct <- c(correct, track$correct) 
+            result <- ifelse(correct, "Correct", "Incorrect")
+            track$correct <- c(paste("Score:", round(cutoff, digits = 2), " ", result), track$correct) 
             
             # stop if 15 questions asked
             if(length(track$qs_asked) == input$n_qs) {
                 user$if_finish_quiz <- TRUE
             }
             # sampling from unasked questions for finding the next question
-            track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
+            track$qs_no <- track$qs_no +1
             
             updateTextAreaInput(session, value = "", inputId = "termdef")
         } else { # if 0 or only 1 word entered
