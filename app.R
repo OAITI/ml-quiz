@@ -109,7 +109,7 @@ server <- function(session, input, output) {
         #initialize values
         user$if_finish_quiz <- NULL
         track$score <- 0
-        track$qs_no <- 1
+        track$qs_no <- sample(c(1:nrow(definitions)), size = 1)
         track$qs_asked <- NULL
         track$bert <- NULL
         track$wordvec <- NULL
@@ -153,7 +153,7 @@ server <- function(session, input, output) {
                 user$if_finish_quiz <- TRUE
             }
             # sampling from unasked questions for finding the next question
-            track$qs_no <- track$qs_no +1
+            track$qs_no <- sample(setdiff(1:380, as.numeric(track$qs_asked)), size = 1)
             
             updateTextAreaInput(session, value = "", inputId = "termdef")
         } else { # if 0 or only 1 word entered
